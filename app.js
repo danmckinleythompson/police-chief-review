@@ -209,8 +209,8 @@ function renderEvidence(evidence) {
     else block.append(node("span", title));
     block.append(node("p", [source.source_publisher, source.source_publication_date].filter(Boolean).join(" · "), "source-meta"));
     block.append(node("blockquote", printable(source.evidence_quote)));
-    if (source.notes) block.append(node("p", printable(source.notes), "muted"));
     const details = node("details"); details.append(node("summary", "Source details")); const list = node("dl");
+    if (source.notes) details.append(node("p", "Collector note (before the citation check): " + printable(source.notes), "muted"));
     for (const [label, key] of [["Evidence ID", "evidence_id"], ["Claim", "claim_type"], ["Support", "support_direction"], ["Date precision", "date_precision"], ["Event from", "event_date_lower"], ["Event through", "event_date_upper"], ["Accessed", "access_date"]]) addDetail(list, label, source[key]);
     details.append(list); block.append(details); target.append(block);
   }
