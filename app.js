@@ -59,7 +59,12 @@ function printable(value) {
 function year(value) { const match = String(value || "").match(/^\d{4}/); return match ? match[0] : "unknown"; }
 function windowLabel(after, by) {
   if (!after && !by) return "Unknown";
-  return [after ? "after " + year(after) : "lower bound unknown", by ? "by " + year(by) : "upper bound unknown"].join(" · ");
+  // An exclusive day bound inside 2000 still allows a departure during 2000.
+  // Never truncate it to "after 2000", which would wrongly exclude that year.
+  const lower = after ? Number(year(after)) + (String(after).endsWith('-12-31') ? 1 : 0) : null;
+  const upper = by ? Number(year(by)) : null;
+  if (lower !== null && upper !== null) return lower === upper ? String(lower) : `${lower}–${upper}`;
+  return lower !== null ? `${lower} or later` : `${upper} or earlier`;
 }
 function answerKey(bundleId, itemFingerprint) { return JSON.stringify([bundleId, itemFingerprint]); }
 function node(tag, text, className) { const result = document.createElement(tag); if (text !== undefined) result.textContent = text; if (className) result.className = className; return result; }
@@ -144,7 +149,7 @@ function renderNavigation() {
   const select = byId("case-select"); select.replaceChildren();
   state.cases.forEach((item, index) => {
     const answer = state.records.get(item.fingerprint); const judgment = answer ? answer.response.judgment : "";
-    const option = node("option", `${index + 1}. ${printable(item.municipality)}, ${printable(item.state)}${judgment ? " · " + judgment : ""}`); option.value = String(index); select.append(option);
+    const option = node("option", `${index + 1}. ${printable(item.original.candidate_name)} · ${printable(item.municipality)}${judgment ? " · " + judgment : ""}`); option.value = String(index); select.append(option);
   });
   select.value = String(state.index);
   byId("previous").disabled = state.index === 0; byId("next").disabled = state.index === state.cases.length - 1;
@@ -156,14 +161,25 @@ function renderCase() {
   const item = state.cases[state.index]; const record = state.records.get(item.fingerprint);
   state.current = {item, revision: record ? record.revision : 0, response: record ? {...record.response} : blankResponse()}; state.dirty = false;
   byId("agency").textContent = `${printable(item.municipality)}, ${printable(item.state)}`;
-  byId("case-subtitle").textContent = `${item.agency_id} · ${item.case_id}`;
+  byId("case-subtitle").textContent = printable(item.original.candidate_name);
   byId("original-name").textContent = printable(item.original.candidate_name);
   const original = byId("original-details"); original.replaceChildren();
-  addDetail(original, "Directory editions (not proven service years)", item.original.observed_years);
+  addDetail(original, "Listed in editions", item.original.observed_years);
   addDetail(original, "Listed role", item.original.role_candidates);
-  addDetail(original, "Directory page references", item.original.source_page_references);
+  const references = byId("original-references"); references.replaceChildren();
+  references.append(node("summary", "Original page references"), node("p", printable(item.original.source_page_references), "muted"));
   renderEvidence(item.evidence);
   byId("stage").textContent = item.provenance && item.provenance.stage === "pending" ? "Research proposal — not yet a validated correction" : "Research proposal · development review";
+  const audit = item.provenance && item.provenance.semantic_audit_gate;
+  const auditPassed = audit && audit.gate_status === "accepted_after_semantic_audit";
+  byId("citation-status").textContent = auditPassed ? "Citation check passed for this proposal." : audit && audit.audit_batch_id ? "Citation check found limitations — this proposal is not cleared for use." : "Citation check pending — this proposal is not cleared for use.";
+  const auditDetails = byId("citation-details"); auditDetails.replaceChildren();
+  let auditReasons = [];
+  try { auditReasons = audit && audit.failure_reasons_json ? JSON.parse(audit.failure_reasons_json) : []; } catch (_) { auditReasons = ["Audit details could not be read."]; }
+  if (!Array.isArray(auditReasons)) auditReasons = [auditReasons];
+  auditDetails.hidden = !auditReasons.length;
+  auditDetails.append(node("summary", "Citation-check details"));
+  for (const reason of auditReasons) auditDetails.append(node("p", printable(reason)));
   byId("proposal-decision").textContent = DECISIONS[item.proposal.decision];
   byId("proposal-summary").textContent = printable(item.proposal.summary);
   const rationale = item.proposal.rationale || item.proposal.adjudication_notes;
@@ -172,8 +188,8 @@ function renderCase() {
   const proposal = byId("proposal-details"); proposal.replaceChildren();
   addDetail(proposal, "Proposed name", item.proposal.canonical_name);
   addDetail(proposal, "Role", item.proposal.role_status);
-  addDetail(proposal, "Appointment bounds (years)", windowLabel(item.proposal.appointment_after, item.proposal.appointment_by));
-  addDetail(proposal, "Departure bounds (years)", windowLabel(item.proposal.departure_after, item.proposal.departure_by));
+  addDetail(proposal, "Appointment year", item.proposal.appointment_year || windowLabel(item.proposal.appointment_after, item.proposal.appointment_by));
+  addDetail(proposal, "Departure year", item.proposal.departure_year || windowLabel(item.proposal.departure_after, item.proposal.departure_by));
   const limitations = byId("limitations"); limitations.replaceChildren();
   const values = Array.isArray(item.proposal.limitations) ? item.proposal.limitations : item.proposal.limitations ? [item.proposal.limitations] : [];
   for (const value of values) limitations.append(node("li", printable(value)));
@@ -238,14 +254,25 @@ function download(value, filename) {
   const anchor = node("a"); anchor.href = url; anchor.download = filename; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function exportAnswers() {
+  if (state.busy || !state.bundle) return;
+  lockEditing(true);
+  const bundleId = state.bundle.bundle_id; const fingerprints = new Set(state.cases.map(item => item.fingerprint));
   try {
     await flushSave();
-    let history;
-    if (state.mode === "server") history = (await api("/api/export")).history;
-    else history = await new Promise((resolve, reject) => { const request = state.db.transaction("history").objectStore("history").getAll(); request.onsuccess = () => resolve(request.result.filter(record => record.bundle_id === state.bundle.bundle_id && state.cases.some(item => item.fingerprint === record.case_fingerprint))); request.onerror = () => reject(request.error); });
-    download({schema_version: "1.0", review_type: REVIEW_TYPE, bundle_id: state.bundle.bundle_id, exported_at: new Date().toISOString(), answers: [...state.records.values()], history}, "chief_tenure_proposal_answers.json");
-    showNotice("Answer backup exported. Keep the downloaded JSON with your private case file.");
+    // Read current answers and their history together, including other tabs' saves.
+    let snapshot;
+    if (state.mode === "server") snapshot = await api("/api/export");
+    else snapshot = await new Promise((resolve, reject) => {
+      const tx = state.db.transaction(["answers", "history"]); const requests = {};
+      for (const store of ["answers", "history"]) requests[store] = tx.objectStore(store).getAll();
+      tx.oncomplete = () => resolve(Object.fromEntries(Object.entries(requests).map(([store, request]) => [store, request.result.filter(record => record.bundle_id === bundleId && fingerprints.has(record.case_fingerprint))])));
+      tx.onerror = () => reject(tx.error || new Error("Could not read the saved answer backup."));
+      tx.onabort = () => reject(tx.error || new Error("The answer backup read was interrupted."));
+    });
+    download({schema_version: "1.0", review_type: REVIEW_TYPE, bundle_id: bundleId, exported_at: new Date().toISOString(), answers: snapshot.answers, history: snapshot.history}, "chief_tenure_proposal_answers.json");
+    showNotice(`Backup exported: ${snapshot.answers.length} answers and ${snapshot.history.length} saved revisions. Keep the downloaded JSON with your private case file.`);
   } catch (error) { showNotice("Export paused: " + error.message + " Use Export unsaved draft if needed."); }
+  finally { lockEditing(false); }
 }
 function exportDraft() {
   if (!state.current) return;
