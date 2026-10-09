@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="review-local-token" content="">
+  <title>Chief tenure · proposal review</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="eyebrow">POLICE CHIEF DIRECTORY</span><h1>Proposal review</h1></div>
+    <div class="tools">
+      <label class="button secondary">Open case file<input id="bundle-file" type="file" accept=".json,application/json"></label>
+      <label class="button secondary">Restore answers<input id="answers-file" type="file" accept=".json,application/json" disabled></label>
+      <button id="export" class="secondary" disabled>Export answers</button>
+    </div>
+  </header>
+  <main>
+    <p class="intro">Read the original entry, check the new evidence, and tell us whether you agree with the proposal.</p>
+    <div class="statusbar"><span id="storage-status">Opening local storage…</span><span id="save-status" role="status" aria-live="polite"></span></div>
+    <p id="notice" class="notice" role="alert" hidden></p>
+    <section id="empty" class="empty"><h2>Open a case file to begin</h2><p>The website contains no research data. Select your private JSON case file above. Its contents stay in this browser.</p></section>
+    <div id="workspace" hidden>
+      <nav class="case-navigation" aria-label="Case navigation">
+        <button id="previous" class="secondary">← Previous</button>
+        <div><label for="case-select" class="sr-only">Choose case</label><select id="case-select"></select><p id="progress"></p></div>
+        <button id="next" class="secondary">Next →</button>
+      </nav>
+      <div class="case-heading"><h2 id="agency"></h2><p id="case-subtitle"></p></div>
+      <section class="card"><span class="step">1</span><div class="card-content"><h3>Original directory assertion</h3><p id="original-name" class="lead"></p><dl id="original-details"></dl><p class="muted">Directory editions are not proven service years. The original assertion is retained.</p></div></section>
+      <section class="card"><span class="step">2</span><div class="card-content"><h3>New evidence</h3><div id="evidence"></div></div></section>
+      <section class="card proposal"><span class="step">3</span><div class="card-content"><h3>Proposed decision</h3><p id="stage" class="muted"></p><p id="proposal-decision" class="lead"></p><p id="proposal-summary"></p><p id="proposal-rationale" class="rationale" hidden></p><dl id="proposal-details"></dl><ul id="limitations"></ul><p class="muted">Agreement records development feedback. It does not change the original data or approve a canonical correction.</p>
+        <fieldset id="response"><legend>Do you agree with this proposal?</legend><div class="choices"><label><input type="radio" name="judgment" value="agree"> Agree</label><label><input type="radio" name="judgment" value="dispute"> Dispute</label><label><input type="radio" name="judgment" value="skip"> Skip for now</label></div></fieldset>
+        <div id="corrections" hidden><p class="muted">Optional: suggest a name or year to investigate.</p><div class="correction-fields"><label>Suggested name<input id="corrected-name" maxlength="300" autocomplete="off"></label><label>Suggested year<input id="corrected-year" maxlength="4" inputmode="numeric" placeholder="YYYY" autocomplete="off"></label></div></div>
+        <label class="note-label" for="note">Optional note</label><textarea id="note" rows="3" maxlength="10000" placeholder="What would you keep, change, or check?"></textarea>
+        <div class="save-actions"><button id="retry-save" class="secondary" hidden>Retry save</button><button id="export-draft" class="secondary" hidden>Export unsaved draft</button></div>
+      </div></section>
+    </div>
+    <footer><p id="privacy">Private files and answers stay in this browser. There are no analytics or uploads. Opening a source link visits that publisher.</p><p>Answers save automatically on this browser and device. Export answers regularly: clearing site data, private browsing, or changing browsers can remove local work.</p><p class="scope">Nonblinded development feedback · not an independent accuracy audit</p></footer>
+  </main>
+</body>
+</html>
